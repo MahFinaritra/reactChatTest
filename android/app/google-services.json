@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "577513204106",
+    "project_id": "reactchat-208c3",
+    "storage_bucket": "reactchat-208c3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:577513204106:android:59b57f92aea53b0600c073",
+        "android_client_info": {
+          "package_name": "com.anonymous.reactChat"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "577513204106-hpe60tb4f2d7qnqe6m68eigd0948vq9t.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAqwrn4DcEHyVwtTQR0n9E5GwjSZsMu6X8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "577513204106-hpe60tb4f2d7qnqe6m68eigd0948vq9t.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

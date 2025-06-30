@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../config/firebaseConfig';
+import sb from '../config/sendbirdConfig'; // ✅ import Sendbird
 
 export default function SigninScreen({ navigation }) {
   const [email, setEmail] = useState('');
@@ -14,11 +15,31 @@ export default function SigninScreen({ navigation }) {
     }
 
     try {
+      // 🔐 Connexion Firebase
       await signInWithEmailAndPassword(auth, email, password);
-      Alert.alert('Succès', 'Connexion réussie !');
-      navigation.navigate('Home'); // Redirige vers la page Home
+
+      // 💬 Connexion Sendbird (avec l'email comme userId)
+      const userId = email.replace(/[@.]/g, '_');
+      sb.connect(userId, (user, error) => {
+
+        if (error) {
+          console.error('Erreur Sendbird:', error);
+          Alert.alert('Erreur Sendbird', error.message);
+          return;
+        }
+
+        // (optionnel) mettre un nom d'utilisateur visible
+        sb.updateCurrentUserInfo(email, null, (responseError) => {
+          if (responseError) {
+            console.warn('Échec de la mise à jour du profil Sendbird');
+          }
+        });
+
+        Alert.alert('Succès', 'Connexion réussie !');
+        navigation.navigate('Home'); // ✅ après Sendbird
+      });
     } catch (error) {
-      console.error(error);
+      console.error('Erreur Firebase:', error);
       Alert.alert('Erreur', error.message);
     }
   };

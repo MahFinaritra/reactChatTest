@@ -1,98 +1,86 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View,
-  FlatList,
-  Text,
-  TextInput,
-  Button,
-  TouchableOpacity,
-  StyleSheet,
+  View, Text, FlatList, TextInput, Button, TouchableOpacity, StyleSheet, Alert
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { collection, query, where, onSnapshot, doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db, auth } from '../config/firebaseConfig'; // adapte le chemin
+import sb from '../config/sendbirdConfig';
 
-const generateChatId = (email1, email2) => {
-  return [email1, email2].sort().join('_'); // unique ID pour une paire
-};
+// Convertit un email en identifiant Sendbird valide
+const emailToUserId = (email) => email.replace(/[@.]/g, '_');
 
-const HomeScreen = () => {
-  const navigation = useNavigation();
-  const currentUserEmail = auth.currentUser.email;
-
+const HomeScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
-  const [chats, setChats] = useState([]);
+  const [channels, setChannels] = useState([]);
 
-  // 🔁 Charger les discussions existantes
+  // Charger les canaux au chargement
   useEffect(() => {
-    const chatsRef = collection(db, 'chats');
-    const q = query(chatsRef, where('users', 'array-contains', currentUserEmail));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const chatsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setChats(chatsData);
-    });
-
-    return unsubscribe;
-  }, []);
-
-  // ➕ Démarrer une nouvelle discussion
-  const handleStartChat = async () => {
-    if (!email || email === currentUserEmail) return;
-
-    const chatId = generateChatId(currentUserEmail, email);
-    const chatRef = doc(db, 'chats', chatId);
-    const chatDoc = await getDoc(chatRef);
-
-    if (!chatDoc.exists()) {
-      await setDoc(chatRef, {
-        users: [currentUserEmail, email],
-        createdAt: serverTimestamp(),
-      });
+    if (!sb.currentUser) {
+      console.warn('Aucun utilisateur connecté à Sendbird.');
+      return;
     }
 
-    navigation.navigate('ChatScreen', { chatId });
-    setEmail(''); // reset
-  };
+    const query = sb.GroupChannel.createMyGroupChannelListQuery();
+    query.includeEmpty = true;
 
-  const openChat = (chatId) => {
-    navigation.navigate('ChatScreen', { chatId });
-  };
+    query.next((channelList, error) => {
+      if (error) {
+        console.error('Erreur lors de la récupération des channels :', error);
+      } else {
+        setChannels(channelList);
+      }
+    });
+  }, []);
 
-  const getOtherUserEmail = (users) => {
-    return users.find(u => u !== currentUserEmail);
+  const handleStartChat = () => {
+    if (!email) {
+      Alert.alert('Erreur', 'Veuillez entrer un email.');
+      return;
+    }
+
+    const targetUserId = emailToUserId(email);
+    const params = new sb.GroupChannelParams();
+    params.addUserIds([targetUserId]);
+    params.isDistinct = true;
+
+    sb.GroupChannel.createChannel(params, (channel, error) => {
+      if (error) {
+        console.error('Erreur lors de la création du canal :', error);
+        Alert.alert('Erreur', error.message);
+        return;
+      }
+
+      console.log('Canal créé :', channel.url);
+      navigation.navigate('ChatScreen', { channelUrl: channel.url });
+    });
   };
 
   return (
     <View style={styles.container}>
-      {/* ➕ Formulaire pour démarrer une nouvelle discussion */}
       <TextInput
-        placeholder="Entrez l'email"
+        placeholder="Entrez l'email de l'utilisateur"
         value={email}
         onChangeText={setEmail}
         style={styles.input}
+        autoCapitalize="none"
       />
       <Button title="Démarrer une discussion" onPress={handleStartChat} />
 
-      {/* 📜 Liste des discussions existantes */}
       <Text style={styles.title}>Discussions existantes :</Text>
       <FlatList
-        data={chats}
-        keyExtractor={(item) => item.id}
+        data={channels}
+        keyExtractor={(item) => item.url}
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.chatItem}
-            onPress={() => openChat(item.id)}
+            onPress={() => navigation.navigate('ChatScreen', { channelUrl: item.url })}
           >
             <Text style={styles.chatText}>
-              {getOtherUserEmail(item.users)}
+              {item.members.map((m) => m.userId).join(', ')}
             </Text>
           </TouchableOpacity>
         )}
-        ListEmptyComponent={<Text style={styles.emptyText}>Aucune discussion pour le moment</Text>}
+        ListEmptyComponent={
+          <Text style={{ textAlign: 'center', marginTop: 20 }}>Aucune discussion</Text>
+        }
       />
     </View>
   );
@@ -101,36 +89,9 @@ const HomeScreen = () => {
 export default HomeScreen;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    paddingTop: 60,
-    backgroundColor: '#fff',
-  },
-  input: {
-    height: 50,
-    borderColor: 'gray',
-    borderWidth: 1,
-    paddingHorizontal: 15,
-    marginBottom: 10,
-    borderRadius: 8,
-  },
-  title: {
-    marginTop: 30,
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  chatItem: {
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderColor: '#eee',
-  },
-  chatText: {
-    fontSize: 16,
-  },
-  emptyText: {
-    marginTop: 20,
-    color: '#888',
-    textAlign: 'center',
-  },
+  container: { flex: 1, padding: 20 },
+  input: { borderWidth: 1, borderColor: '#ccc', marginBottom: 10, padding: 10, borderRadius: 8 },
+  title: { marginTop: 20, fontSize: 18, fontWeight: 'bold' },
+  chatItem: { padding: 15, borderBottomWidth: 1, borderColor: '#eee' },
+  chatText: { fontSize: 16 },
 });

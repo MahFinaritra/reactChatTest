@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../config/firebaseConfig';
+import sb from '../config/sendbirdConfig';
 
 export default function SignupScreen({ navigation }) {
   const [email, setEmail] = useState('');
@@ -14,9 +15,31 @@ export default function SignupScreen({ navigation }) {
     }
 
     try {
+      // 🔐 Création du compte Firebase
       await createUserWithEmailAndPassword(auth, email, password);
-      Alert.alert('Succès', 'Compte créé !');
-      navigation.navigate('Home'); // ou 'Signin' si tu veux qu'il se connecte ensuite
+
+      // 🧼 Convertir l'email en userId valide pour Sendbird
+      const userId = email.replace(/[@.]/g, '_');
+
+      // 🔁 Connexion à Sendbird
+      sb.connect(userId, (user, error) => {
+        if (error) {
+          console.error('Erreur Sendbird:', error);
+          Alert.alert('Erreur Sendbird', error.message);
+          return;
+        }
+
+        // (optionnel) Mettre à jour le profil utilisateur sur Sendbird
+        sb.updateCurrentUserInfo(email, null, (updateError) => {
+          if (updateError) {
+            console.warn('Échec de la mise à jour du profil Sendbird');
+          }
+        });
+
+        Alert.alert('Succès', 'Compte créé et connecté !');
+        navigation.navigate('Home');
+      });
+
     } catch (error) {
       console.error(error);
       Alert.alert('Erreur', error.message);

@@ -1,55 +1,79 @@
 import React, { useEffect, useState } from 'react';
 import {
-  SafeAreaView,
   View,
   Text,
   TextInput,
   Button,
   FlatList,
   StyleSheet,
+  SafeAreaView,
   KeyboardAvoidingView,
   Platform,
   TouchableWithoutFeedback,
   Keyboard,
 } from 'react-native';
 import { useRoute } from '@react-navigation/native';
-import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
-import { db, auth } from '../config/firebaseConfig';
+import sb from '../config/sendbirdConfig';
 
-const ChatScreen = () => {
+export default function ChatScreen() {
   const route = useRoute();
-  const { chatId } = route.params;
+  const { channelUrl } = route.params;
 
+  const [channel, setChannel] = useState(null);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
 
   useEffect(() => {
-    const messagesRef = collection(db, 'chats', chatId, 'messages');
-    const q = query(messagesRef, orderBy('createdAt', 'asc'));
+    // 🔁 Charger le canal existant
+    sb.GroupChannel.getChannel(channelUrl, (groupChannel, error) => {
+      if (error) {
+        console.error('Erreur lors de la récupération du canal:', error);
+        return;
+      }
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedMessages = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setMessages(fetchedMessages);
+      setChannel(groupChannel);
+
+      // 📥 Charger les messages existants
+      const messageListQuery = groupChannel.createPreviousMessageListQuery();
+      messageListQuery.load(30, false, (fetchedMessages, err) => {
+        if (err) {
+          console.error('Erreur lors du chargement des messages:', err);
+          return;
+        }
+
+        setMessages(fetchedMessages);
+      });
+
+      // ⚡ Écouter les nouveaux messages en temps réel
+      const ChannelHandler = new sb.ChannelHandler();
+      ChannelHandler.onMessageReceived = (incomingChannel, message) => {
+        if (incomingChannel.url === channelUrl) {
+          setMessages((prevMessages) => [...prevMessages, message]);
+        }
+      };
+
+      sb.addChannelHandler('ChatScreenHandler', ChannelHandler);
     });
 
-    return () => unsubscribe();
-  }, [chatId]);
+    // 🔚 Nettoyage du listener quand on quitte l'écran
+    return () => {
+      sb.removeChannelHandler('ChatScreenHandler');
+    };
+  }, [channelUrl]);
 
-  const handleSend = async () => {
-    if (text.trim() === '') return;
+  const handleSend = () => {
+    if (!channel || text.trim() === '') return;
 
-    const messagesRef = collection(db, 'chats', chatId, 'messages');
+    // 📤 Envoyer le message
+    channel.sendUserMessage(text, (message, error) => {
+      if (error) {
+        console.error('Erreur lors de l’envoi:', error);
+        return;
+      }
 
-    await addDoc(messagesRef, {
-      text,
-      sender: auth.currentUser.email,
-      createdAt: serverTimestamp(),
+      setMessages((prev) => [...prev, message]);
+      setText('');
     });
-
-    setText('');
   };
 
   return (
@@ -57,21 +81,20 @@ const ChatScreen = () => {
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 80} // ajuste si besoin
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 80}
       >
-        {/* Pour fermer le clavier en tapant à l'extérieur */}
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={styles.inner}>
             <FlatList
               data={messages}
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item) => item.messageId.toString()}
               renderItem={({ item }) => (
                 <Text style={styles.message}>
-                  <Text style={styles.sender}>{item.sender}: </Text>{item.text}
+                  <Text style={styles.sender}>{item.sender?.userId || 'inconnu'} : </Text>
+                  {item.message}
                 </Text>
               )}
               contentContainerStyle={styles.messageList}
-              inverted={false}
             />
             <View style={styles.inputContainer}>
               <TextInput
@@ -79,7 +102,6 @@ const ChatScreen = () => {
                 value={text}
                 onChangeText={setText}
                 style={styles.input}
-                multiline={true}
               />
               <Button title="Envoyer" onPress={handleSend} />
             </View>
@@ -88,9 +110,7 @@ const ChatScreen = () => {
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
-};
-
-export default ChatScreen;
+}
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -124,7 +144,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    maxHeight: 100, // pour autoriser multiline sans dépasser
+    maxHeight: 100,
     borderColor: 'gray',
     borderWidth: 1,
     paddingHorizontal: 10,
